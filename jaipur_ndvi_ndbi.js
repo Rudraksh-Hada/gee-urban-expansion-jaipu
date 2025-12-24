@@ -1,7 +1,7 @@
-// MOBILE-SAFE NDVI + NDBI CHANGE FOR JAIPUR (2014–2024)
+// UPDATED: NDVI + NDBI CHANGE FOR JAIPUR (2014–2024)
 
-// 1) Study area (small box)
-var roi = ee.Geometry.Rectangle([75.75, 26.85, 75.85, 26.95]);
+// 1) Study area (slightly larger box)
+var roi = ee.Geometry.Rectangle([75.72, 26.83, 75.88, 26.97]);
 Map.centerObject(roi, 11);
 Map.setOptions('TERRAIN');
 
@@ -20,7 +20,7 @@ function maskClouds(img) {
 }
 var clean = landsat.map(maskClouds);
 
-// 4) NDVI helpers and images  (use SR_B5, SR_B4)
+// 4) NDVI (use SR_B5, SR_B4)
 function toNDVI(img) {
   return img.normalizedDifference(['SR_B5','SR_B4']).rename('NDVI');
 }
@@ -33,7 +33,7 @@ var ndvi24 = clean.filterDate('2024-01-01','2024-12-31')
 
 var ndviChange = ndvi24.subtract(ndvi14);
 
-// 5) NDBI helpers and images (use SR_B6, SR_B5)
+// 5) NDBI (use SR_B6, SR_B5)
 function toNDBI(img) {
   return img.normalizedDifference(['SR_B6','SR_B5']).rename('NDBI');
 }
@@ -49,23 +49,23 @@ var ndbiChange = ndbi24.subtract(ndbi14);
 // 6) Visualize change maps
 Map.addLayer(
   ndviChange,
-  {min:-0.4,max:0.4,palette:['red','white','green']},
+  {min:-0.3,max:0.3,palette:['red','white','green']},
   'NDVI Change (Red = loss, Green = gain)'
 );
 
 Map.addLayer(
   ndbiChange,
-  {min:-0.2,max:0.2,palette:['green','white','red']},
+  {min:-0.15,max:0.15,palette:['green','white','red']},
   'NDBI Change (Red = new urban)'
 );
 
-// 7) Masks
-var vegLoss  = ndviChange.lt(-0.2);
-var urbanNew = ndbiChange.gt(0.1);
+// 7) Looser thresholds so changes are detected
+var vegLoss  = ndviChange.lt(-0.1);   // was -0.2
+var urbanNew = ndbiChange.gt(0.05);   // was 0.1
 
-// 8) Area stats with lighter settings
+// 8) Stats with finer scale
 var simpleRoi = roi.simplify(500);
-var statScale = 120;
+var statScale = 90;  // was 120
 
 var vegLossKm2 = vegLoss.multiply(ee.Image.pixelArea()).divide(1e6)
   .reduceRegion({
@@ -83,11 +83,11 @@ var urbanNewKm2 = urbanNew.multiply(ee.Image.pixelArea()).divide(1e6)
     maxPixels: 5e7
   });
 
-print('📊 JAIPUR (small ROI) 2014–2024:');
+print('📊 JAIPUR (expanded ROI) 2014–2024:');
 print('🌿 Vegetation loss (km²):', vegLossKm2);
 print('🏗️ New urban (km²):',      urbanNewKm2);
 
-// 9) NDVI time series (optional)
+// 9) NDVI time series
 var years = ee.List.sequence(2014, 2024);
 
 var ndviTs = ee.ImageCollection(
@@ -109,7 +109,7 @@ var chart = ui.Chart.image.series({
   reducer: ee.Reducer.mean(),
   scale: statScale
 }).setOptions({
-  title: '🌿 NDVI trend (small Jaipur ROI)',
+  title: '🌿 NDVI trend (Jaipur ROI)',
   hAxis: {title: 'Year'},
   vAxis: {title: 'NDVI'},
   lineWidth: 3,
@@ -117,22 +117,3 @@ var chart = ui.Chart.image.series({
 });
 
 print(chart);
-
-print('✅ If any reduceRegion still errors, ignore stats and use the maps + chart.');
-Export.image.toDrive({
-  image: ndviChange,
-  description: 'Jaipur_small_NDVI_Change',
-  scale: statScale,
-  region: simpleRoi,
-  maxPixels: 5e7,
-  fileFormat: 'GeoTIFF'
-});
-
-Export.image.toDrive({
-  image: ndbiChange,
-  description: 'Jaipur_small_NDBI_Change',
-  scale: statScale,
-  region: simpleRoi,
-  maxPixels: 5e7,
-  fileFormat: 'GeoTIFF'
-});
